@@ -135,7 +135,7 @@ namespace Shinobi.WebSockets
                 ShinobiWebSocket shinobiWebSocket;
                 try
                 {
-                    shinobiWebSocket = await this.ConnectAsync(cancellationToken);
+                    shinobiWebSocket = await this.ConnectAsync(Guid.NewGuid(), cancellationToken);
                 }
                 catch (Exception)
                 {
@@ -298,17 +298,15 @@ namespace Shinobi.WebSockets
         /// </summary>
         private async Task ManageConnectionAsync(CancellationToken cancellationToken)
         {
-            var attemptNumber = 0;
             var reconnectAttemptNumber = 0;
 
             while (!cancellationToken.IsCancellationRequested)
             {
                 DateTime? connectionTime = null;
                 ShinobiWebSocket? shinobiWebSocket = null;
-
+                var guid = Guid.NewGuid();
                 try
                 {
-                    attemptNumber++;
 
                     // If this is a reconnection attempt, handle delay and events
                     if (reconnectAttemptNumber > 0)
@@ -351,7 +349,12 @@ namespace Shinobi.WebSockets
                     }
 
                     // Try to establish connection
-                    shinobiWebSocket = await this.ConnectAsync(cancellationToken);
+                    using (var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+                    {
+                        cts.CancelAfter(TimeSpan.FromMinutes(2));
+                        shinobiWebSocket = await this.ConnectAsync(guid, cts.Token);
+                    }
+
                     this.webSocket = shinobiWebSocket;
 
                     connectionTime = DateTime.Now;
@@ -371,12 +374,7 @@ namespace Shinobi.WebSockets
 
                     var bufferedReconnectAttemptNumber = reconnectAttemptNumber;
 
-                    // Connection successful, log success but don't reset reconnect attempt counter yet
-                    // (we'll reset it only if the connection turns out to be stable)
-                    if (reconnectAttemptNumber > 0)
-                    {
-                        this.logger?.ReconnectedSuccessfully(this.currentUri!, reconnectAttemptNumber);
-                    }
+                    this.logger?.ConnectedSuccessfully(this.currentUri!, guid, reconnectAttemptNumber);
 
                     // Handle messages until disconnection
                     await this.HandleMessagesAsync(shinobiWebSocket, cancellationToken);
@@ -407,7 +405,7 @@ namespace Shinobi.WebSockets
                 }
                 catch (Exception ex)
                 {
-                    this.logger?.ConnectionError(attemptNumber, ex);
+                    this.logger?.ConnectionError(this.currentUri, guid, reconnectAttemptNumber, ex);
 
                     if (!this.options.ReconnectOptions.Enabled)
                     {
@@ -431,6 +429,7 @@ namespace Shinobi.WebSockets
                 }
                 finally
                 {
+                    this.logger?.StopManageConnection(this.currentUri);
                     shinobiWebSocket?.Dispose();
                     if (this.webSocket == shinobiWebSocket)
                         this.webSocket = null;
@@ -441,11 +440,11 @@ namespace Shinobi.WebSockets
         /// <summary>
         /// Establishes a single WebSocket connection
         /// </summary>
-        private async Task<ShinobiWebSocket> ConnectAsync(CancellationToken cancellationToken)
+        private async Task<ShinobiWebSocket> ConnectAsync(Guid guid, CancellationToken cancellationToken)
         {
             this.ChangeConnectionState(WebSocketConnectionState.Connecting);
 
-            var shinobiWebSocket = await this.PerformWebSocketConnectionAsync(this.currentUri!, this.options, cancellationToken);
+            var shinobiWebSocket = await this.PerformWebSocketConnectionAsync(this.currentUri!, guid, this.options, cancellationToken);
 
             // Cast to ShinobiWebSocket since we know we return ShinobiWebSocket
             this.ChangeConnectionState(WebSocketConnectionState.Connected);
@@ -537,9 +536,8 @@ namespace Shinobi.WebSockets
         /// <summary>
         /// Performs the complete WebSocket connection process
         /// </summary>
-        private async ValueTask<ShinobiWebSocket> PerformWebSocketConnectionAsync(Uri uri, WebSocketClientOptions options, CancellationToken cancellationToken)
+        private async ValueTask<ShinobiWebSocket> PerformWebSocketConnectionAsync(Uri uri, Guid guid, WebSocketClientOptions options, CancellationToken cancellationToken)
         {
-            var guid = Guid.NewGuid();
             var uriScheme = uri.Scheme.ToLower();
             var client = await this.GetClientAsync(
                     guid,
@@ -617,8 +615,8 @@ namespace Shinobi.WebSockets
         /// <summary>
         /// Override this if you need more fine grained control over the TLS handshake like setting the SslProtocol or adding a client certificate
         /// </summary>
-        protected virtual void TlsAuthenticateAsClient(SslStream sslStream, string host)
-            => sslStream.AuthenticateAsClient(host, null, SslProtocols.Tls12, true);
+        protected virtual Task TlsAuthenticateAsClientAsync(SslStream sslStream, string host)
+            => sslStream.AuthenticateAsClientAsync(host, null, SslProtocols.Tls12, true);
 
         /// <summary>
         /// Creates the underlying stream for WebSocket connection
@@ -649,7 +647,7 @@ namespace Shinobi.WebSockets
                     this.logger?.AttemptingToSecureSslConnection(loggingGuid);
 
                     // This will throw an AuthenticationException if the certificate is not valid
-                    this.TlsAuthenticateAsClient(sslStream, host);
+                    await this.TlsAuthenticateAsClientAsync(sslStream, host).WaitAsync(cancellationToken);
                     this.logger?.ConnectionSecured(loggingGuid);
                     return (sslStream, tcpClient);
                 }
@@ -694,7 +692,7 @@ namespace Shinobi.WebSockets
 
             var httpRequest = Encoding.UTF8.GetBytes(handshakeHttpRequest);
             stream.Write(httpRequest, 0, httpRequest.Length);
-            this.logger?.HandshakeSent(guid, handshakeHttpRequest);
+            this.logger?.HandshakeSent(uri, guid, handshakeHttpRequest);
             return this.ConnectAsync(tcpClient, guid, stream, secWebSocketKey, options, cancellationToken);
         }
 
