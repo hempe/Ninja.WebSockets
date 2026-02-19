@@ -59,9 +59,9 @@ namespace Shinobi.WebSockets.Internal
         [LoggerMessage(
             EventId = 1101,
             Level = LogLevel.Information,
-            Message = "Client {Guid} sent handshake: {HttpHeader}")]
+            Message = "Client {Guid} sent handshake to {Uri}: {HttpHeader}")]
         public static partial void HandshakeSent(
-            this ILogger logger, Guid guid, string httpHeader);
+            this ILogger logger, Uri uri, Guid guid, string httpHeader);
 
         [LoggerMessage(
             EventId = 1102,
@@ -303,9 +303,9 @@ namespace Shinobi.WebSockets.Internal
         [LoggerMessage(
             EventId = 4002,
             Level = LogLevel.Warning,
-            Message = "Connection error (attempt {AttemptNumber})")]
+            Message = "Connection error to {Uri} for {Guid}, (attempt {AttemptNumber})")]
         public static partial void ConnectionError(
-            this ILogger logger, int attemptNumber, Exception exception);
+            this ILogger logger, Uri? uri, Guid guid, int attemptNumber, Exception exception);
 
         [LoggerMessage(
             EventId = 4003,
@@ -317,9 +317,9 @@ namespace Shinobi.WebSockets.Internal
         [LoggerMessage(
             EventId = 4004,
             Level = LogLevel.Information,
-            Message = "Successfully reconnected to {Uri} after {AttemptNumber} attempts")]
-        public static partial void ReconnectedSuccessfully(
-            this ILogger logger, Uri uri, int attemptNumber);
+            Message = "Successfully connected to {Uri} for {Guid} after {AttemptNumber} attempts")]
+        public static partial void ConnectedSuccessfully(
+            this ILogger logger, Uri uri, Guid guid, int attemptNumber);
 
         [LoggerMessage(
             EventId = 4005,
@@ -376,6 +376,13 @@ namespace Shinobi.WebSockets.Internal
             Message = "Reconnecting to {Uri} in {Delay}ms (attempt {AttemptNumber})")]
         public static partial void ReconnectingWithDelay(
             this ILogger logger, Uri uri, int delay, int attemptNumber);
+
+        [LoggerMessage(
+            EventId = 4013,
+            Level = LogLevel.Information,
+            Message = "Stop managed connection to {Uri}")]
+        public static partial void StopManageConnection(
+            this ILogger logger, Uri? uri);
 
         #endregion
 
