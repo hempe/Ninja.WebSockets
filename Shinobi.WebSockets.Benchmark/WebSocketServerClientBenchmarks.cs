@@ -19,7 +19,7 @@ using Shinobi.WebSockets;
 using Shinobi.WebSockets.Extensions;
 using Shinobi.WebSockets.Http;
 
-[SimpleJob(RuntimeMoniker.Net90)]
+[SimpleJob(RuntimeMoniker.Net10_0)]
 //[SimpleJob(RuntimeMoniker.Net472)]
 [MemoryDiagnoser]
 [Orderer(SummaryOrderPolicy.FastestToSlowest)]

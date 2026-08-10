@@ -355,8 +355,10 @@ namespace Shinobi.WebSockets.Builders
 
                 if (response.StatusCode == 101) // Only add CORS headers for successful WebSocket upgrades
                 {
-                    response.AddHeader("Access-Control-Allow-Origin", allowedOriginsValue)
-                           .AddHeader("Access-Control-Allow-Credentials", "true");
+                    response.AddHeader("Access-Control-Allow-Origin", allowedOriginsValue);
+
+                    if (allowedOrigins.All(x => x != "*"))
+                        response.AddHeader("Access-Control-Allow-Credentials", "true");
                 }
 
                 return response;
